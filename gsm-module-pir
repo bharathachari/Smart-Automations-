@@ -1,0 +1,58 @@
+#include <SoftwareSerial.h>
+// Team 43
+//Components used - ARUDINO UNO R3, GSM SIM 800L, PIR MOTION SENSOR, POWER SUPPLY
+// Alarm receiver's phone number with country code
+const String PHONE = "+91**********";
+
+// GSM Module RX pin to Arduino 3
+// GSM Module TX pin to Arduino 2
+#define rxPin 2
+#define txPin 3
+SoftwareSerial sim800(rxPin, txPin);
+
+// The pin that the PIR sensor is attached to
+int pir_sensor = 11;
+
+void setup() {
+  pinMode(pir_sensor, INPUT);    // Initialize PIR sensor as input
+  Serial.begin(115200);          // Initialize serial monitor
+  sim800.begin(9600);            // Initialize GSM module
+
+  Serial.println("Initializing SIM800L...");
+  checkGSMStatus();
+}
+
+void loop() {
+  // Continuously check the GSM module status
+  checkGSMStatus();
+
+  // Read PIR sensor value
+  int val = digitalRead(pir_sensor);
+
+  if (val == HIGH) { // Motion detected
+    Serial.println("Motion detected!");
+    Serial.println("Calling the phone number: " + PHONE);
+    delay(1000);
+    sim800.println("ATD" + PHONE + ";"); // Send AT command to dial the phone number
+    delay(20000); // Wait for 20 seconds before rechecking motion
+    Serial.println("Call process completed or timed out.");
+  } else { // No motion detected
+    Serial.println("No motion detected. System idle.");
+    delay(2000); // Delay for 2 seconds to avoid flooding the serial monitor
+  }
+}
+
+// Function to check GSM module status
+void checkGSMStatus() {
+  static unsigned long lastCheckTime = 0; // To avoid frequent checks
+  unsigned long currentTime = millis();
+
+  // Check GSM status every 5 seconds
+  if (currentTime - lastCheckTime >= 5000) {
+    Serial.println("Checking GSM module status...");
+    sim800.println("AT"); // Send AT command
+    delay(1000);
+
+    lastCheckTime = currentTime;
+  }
+}
