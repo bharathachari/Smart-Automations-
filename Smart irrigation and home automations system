@@ -1,0 +1,217 @@
+// Team 43 Mini project 
+// Bharath. M
+//Components used - ESP32 DEVKIT V1, CAPACITIVE SOIL SENSOR V1.2, DHT11, 4 CHANNEL 5V RELAY, WATER PUMP, SINGLE CHANNEL RELAY, EXTERNAL POWER SOURCE(for water pump)
+//IOT Platform used - Blynk IOT
+//Copy the code and save it in Arduino IDE as an ino file
+
+#define BLYNK_TEMPLATE_ID "TMPL3IDWj5euW"
+#define BLYNK_TEMPLATE_NAME "Smart Automations"
+#define BLYNK_AUTH_TOKEN "pGmaGToxIM0VoC_wU9K0Tce4unntvo7T"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <DHT.h>
+
+// WiFi credentials
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "Realme";
+char pass[] = "m2p52329";
+
+// Soil Moisture Sensor
+#define SOIL_MOISTURE_PIN 34
+#define PUMP_ON_THRESHOLD 2200  // Pump turns ON when soil moisture >= 2200
+#define PUMP_OFF_THRESHOLD 1500 // Pump turns OFF when soil moisture <= 1500
+
+// Pump Control
+#define PUMP_PIN 22
+#define PUMP_SWITCH V6
+
+// DHT Sensor
+#define DHTPIN 23
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+// Relay and Button Definitions
+#define button1_pin 26
+#define button2_pin 25
+#define button3_pin 33
+#define button4_pin 32
+
+#define relay1_pin 13
+#define relay2_pin 12
+#define relay3_pin 14
+#define relay4_pin 27
+
+int relay1_state = 0;
+int relay2_state = 0;
+int relay3_state = 0;
+int relay4_state = 0;
+
+#define button1_vpin V1
+#define button2_vpin V2
+#define button3_vpin V3
+#define button4_vpin V4
+
+BlynkTimer timer;
+bool isPumpOn = false;
+
+// Function to send soil moisture data and control pump
+void sendSoilMoistureData() {
+  int soilMoisture = analogRead(SOIL_MOISTURE_PIN);
+  Serial.print("Soil Moisture: ");
+  Serial.println(soilMoisture);
+
+  // Send soil moisture reading to Blynk
+  Blynk.virtualWrite(V5, soilMoisture);
+
+  // Automatic pump control logic
+  if (soilMoisture >= PUMP_ON_THRESHOLD) {
+    digitalWrite(PUMP_PIN, LOW); // Turn pump ON
+    if (!isPumpOn) {
+      isPumpOn = true;
+      Serial.println("Pump turned ON (Soil Moisture >= Threshold)");
+      Blynk.logEvent("pump_on", "Pump turned ON automatically");
+    }
+  } else if (soilMoisture <= PUMP_OFF_THRESHOLD) {
+    digitalWrite(PUMP_PIN, HIGH); // Turn pump OFF
+    if (isPumpOn) {
+      isPumpOn = false;
+      Serial.println("Pump turned OFF (Soil Moisture <= Threshold)");
+      Blynk.logEvent("pump_off", "Pump turned OFF automatically");
+    }
+  }
+}
+
+// Function to send temperature and humidity data
+void sendDHTData() {
+  float temperature = NAN, humidity = NAN;
+
+  // Retry mechanism for stable DHT readings
+  for (int i = 0; i < 3; i++) {
+    temperature = dht.readTemperature();
+    humidity = dht.readHumidity();
+    if (!isnan(temperature) && !isnan(humidity)) break;
+    delay(100); // Short delay between retries
+  }
+
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor after retries!");
+    return;
+  }
+
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(" °C, Humidity: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+
+  Blynk.virtualWrite(V10, temperature);
+  Blynk.virtualWrite(V11, humidity);
+
+  Serial.println("Updated Blynk with temperature and humidity data.");
+}
+
+// Function to check Blynk connection status
+void checkBlynkConnection() {
+  if (!Blynk.connected()) {
+    Serial.println("Blynk not connected. Attempting to reconnect...");
+    Blynk.connect(); // Attempt to reconnect
+  } else {
+    Serial.println("Blynk is connected.");
+  }
+}
+
+// Blynk handler for manual pump control
+BLYNK_WRITE(PUMP_SWITCH) {
+  isPumpOn = param.asInt();
+  digitalWrite(PUMP_PIN, isPumpOn ? HIGH : LOW);
+  Serial.println(isPumpOn ? "Pump manually turned ON" : "Pump manually turned OFF");
+}
+
+// Blynk handlers for relay control
+BLYNK_CONNECTED() {
+  Blynk.syncVirtual(button1_vpin, button2_vpin, button3_vpin, button4_vpin);
+}
+
+BLYNK_WRITE(button1_vpin) {
+  relay1_state = param.asInt();
+  digitalWrite(relay1_pin, relay1_state);
+}
+
+BLYNK_WRITE(button2_vpin) {
+  relay2_state = param.asInt();
+  digitalWrite(relay2_pin, relay2_state);
+}
+
+BLYNK_WRITE(button3_vpin) {
+  relay3_state = param.asInt();
+  digitalWrite(relay3_pin, relay3_state);
+}
+
+BLYNK_WRITE(button4_vpin) {
+  relay4_state = param.asInt();
+  digitalWrite(relay4_pin, relay4_state);
+}
+
+// Function to handle physical button presses
+void listenPushButtons() {
+  if (digitalRead(button1_pin) == LOW) {
+    delay(200);
+    relay1_state = !relay1_state;
+    digitalWrite(relay1_pin, relay1_state);
+    Blynk.virtualWrite(button1_vpin, relay1_state);
+  } else if (digitalRead(button2_pin) == LOW) {
+    delay(200);
+    relay2_state = !relay2_state;
+    digitalWrite(relay2_pin, relay2_state);
+    Blynk.virtualWrite(button2_vpin, relay2_state);
+  } else if (digitalRead(button3_pin) == LOW) {
+    delay(200);
+    relay3_state = !relay3_state;
+    digitalWrite(relay3_pin, relay3_state);
+    Blynk.virtualWrite(button3_vpin, relay3_state);
+  } else if (digitalRead(button4_pin) == LOW) {
+    delay(200);
+    relay4_state = !relay4_state;
+    digitalWrite(relay4_pin, relay4_state);
+    Blynk.virtualWrite(button4_vpin, relay4_state);
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  // Initialize pins
+  pinMode(PUMP_PIN, OUTPUT);
+  pinMode(button1_pin, INPUT_PULLUP);
+  pinMode(button2_pin, INPUT_PULLUP);
+  pinMode(button3_pin, INPUT_PULLUP);
+  pinMode(button4_pin, INPUT_PULLUP);
+  pinMode(relay1_pin, OUTPUT);
+  pinMode(relay2_pin, OUTPUT);
+  pinMode(relay3_pin, OUTPUT);
+  pinMode(relay4_pin, OUTPUT);
+
+  digitalWrite(relay1_pin, HIGH);
+  digitalWrite(relay2_pin, HIGH);
+  digitalWrite(relay3_pin, HIGH);
+  digitalWrite(relay4_pin, HIGH);
+
+  // Initialize DHT sensor
+  dht.begin();
+
+  // Connect to WiFi and Blynk
+  Blynk.begin(auth, ssid, pass);
+
+  // Timers for sensors and connection check
+  timer.setInterval(3000L, sendSoilMoistureData);
+  timer.setInterval(2000L, sendDHTData);
+  timer.setInterval(10000L, checkBlynkConnection); // Check connection every 10 seconds
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+  listenPushButtons();
+}
